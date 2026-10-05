@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-specific
+data/
+*.nc
+*.grib
+*.parquet
+.cdsapirc
+.env
