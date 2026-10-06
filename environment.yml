@@ -1,0 +1,23 @@
+name: prs
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - scipy
+  - statsmodels
+  - matplotlib
+  - xarray
+  - netcdf4
+  - pyarrow
+  - requests
+  - jupyter
+  - ipykernel
+  - pytest
+  - pip
+  - pip:
+      - cdsapi
+      - windpowerlib
+
+      
