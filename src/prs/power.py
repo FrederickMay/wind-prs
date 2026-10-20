@@ -20,6 +20,7 @@ current and future wind power output").
 import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
+from scipy.special import erfc
 
 N_TURBINES = 76
 RATED_KW = 3000.0
@@ -40,7 +41,10 @@ GRID = np.arange(0.0, 40.01, 0.1)            # wind speed grid for curve tables
 _CP_KNEE = 11.0   # above this the SWT113 cp falls only because it hits its own rating
 
 
-def turbine_curve(rotor_diameter=101.0, v=GRID):
+CUT_OUT_SPREAD = 1.5   # m/s: turbines in a farm do not all cut out at once
+
+
+def turbine_curve(rotor_diameter=101.0, v=GRID, cut_out=True):
     """Single-turbine power (kW) on wind speeds v.
 
     Above ~11 m/s the reference cp drops because the SWT113 is already
@@ -51,20 +55,28 @@ def turbine_curve(rotor_diameter=101.0, v=GRID):
     cp = np.interp(np.minimum(v, _CP_KNEE), _CP_V, _CP, left=0.0)
     p_kw = 0.5 * RHO * area * cp * v ** 3 / 1000
     p_kw = np.minimum(p_kw, RATED_KW)
-    p_kw[(v < _CP_V[0]) | (v > CUT_OUT)] = 0.0
+    p_kw[v < _CP_V[0]] = 0.0
+    if cut_out:
+        p_kw[v > CUT_OUT] = 0.0
     return p_kw
 
 
 def farm_cf_curve(rotor_diameter=101.0, v=GRID):
-    """Smoothed farm capacity factor (0..1) on wind speeds v."""
-    p = turbine_curve(rotor_diameter, GRID) / RATED_KW
-    dv = GRID[1] - GRID[0]
+    """Smoothed farm capacity factor (0..1) on wind speeds v.
+
+    The ramp is smoothed with the widening Gaussian. Cut-out is handled
+    separately with a fixed, narrow spread: smoothing it with sigma ~5 m/s
+    would wrongly pull output down from ~15 m/s, which the metered data
+    clearly does not show.
+    """
+    p = turbine_curve(rotor_diameter, GRID, cut_out=False) / RATED_KW
     out = np.empty_like(v, dtype=float)
     for i, vi in enumerate(v):
         sigma = 0.6 + 0.2 * vi
         w = np.exp(-0.5 * ((GRID - vi) / sigma) ** 2)
-        out[i] = (w * p).sum() / w.sum() if w.sum() > 0 else 0.0
-    return out
+        out[i] = (w * p).sum() / w.sum()
+    survive = 0.5 * erfc((v - CUT_OUT) / (CUT_OUT_SPREAD * np.sqrt(2)))
+    return out * survive
 
 
 class PowerModel:

@@ -15,6 +15,13 @@ dependencies:
   - jupyter
   - ipykernel
   - pytest
+  - nbformat
+  - nbconvert
+  # C++ engine (Phase 3): build tools and headers; compiler is MSVC Build Tools
+  - cmake
+  - ninja
+  - pybind11
+  - eigen
   - pip
   - pip:
       - cdsapi
