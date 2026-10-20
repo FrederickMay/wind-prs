@@ -1,8 +1,8 @@
 """Check the fitted models reproduce the data they were fitted on.
 
 These use the real data (skipped if it is not downloaded) and a shared
-10-year simulation. Tolerances are loose on purpose: the aim is to catch a
-broken model, not to test Monte Carlo noise.
+10-year simulation. The tolerances are deliberately loose. They're
+there to catch a broken model, not Monte Carlo noise.
 """
 import numpy as np
 import pandas as pd

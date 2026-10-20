@@ -4,18 +4,19 @@ Pipeline for one hour:
   ERA5 100 m speed --(bias correction a*ws + b)--> effective hub speed
   --(farm power curve)--> capacity factor --(x efficiency x 228 MW)--> MW
 
-Turbine curve. Pen y Cymoedd uses 76 Siemens 3.0 MW turbines (89.5 m hub;
-sources disagree on a 101 m vs 108 m rotor). windpowerlib has no SWT-3.0
-curve, so we build one from physics, P = 1/2 rho A cp(v) v^3, using the
-power coefficient cp(v) of the closest Siemens model in windpowerlib
-(SWT113/3200), capped at the 3.0 MW rating. The rotor size is then chosen by
-which fits metered output better.
+Turbine curve. Pen y Cymoedd has 76 Siemens 3.0 MW turbines with an
+89.5 m hub; sources disagree on whether the rotor is 101 m or 108 m.
+windpowerlib doesn't have an SWT-3.0 curve, so I build one from physics,
+P = 1/2 rho A cp(v) v^3, borrowing cp(v) from the nearest Siemens model it
+does have (SWT113/3200) and capping at 3.0 MW. Both rotor sizes fit the
+metered data equally well, so I use 101 m to match the model name.
 
-Farm curve. A single turbine curve is too sharp for a whole farm: turbines
-see different wind speeds (terrain, wakes) and ERA5 is a grid-box average.
-We smooth it with a Gaussian of width sigma(v) = 0.6 + 0.2 v m/s
-(Staffell & Pfenninger 2016, "Using bias-corrected reanalysis to simulate
-current and future wind power output").
+Farm curve. One turbine's curve is too sharp for a whole farm, because the
+turbines see different winds (terrain, wakes) and ERA5 is a grid-box
+average anyway. So the curve is smoothed with a Gaussian of width
+sigma(v) = 0.6 + 0.2 v m/s (Staffell & Pfenninger 2016, "Using
+bias-corrected reanalysis to simulate current and future wind power
+output").
 """
 import numpy as np
 import pandas as pd
@@ -64,10 +65,9 @@ def turbine_curve(rotor_diameter=101.0, v=GRID, cut_out=True):
 def farm_cf_curve(rotor_diameter=101.0, v=GRID):
     """Smoothed farm capacity factor (0..1) on wind speeds v.
 
-    The ramp is smoothed with the widening Gaussian. Cut-out is handled
-    separately with a fixed, narrow spread: smoothing it with sigma ~5 m/s
-    would wrongly pull output down from ~15 m/s, which the metered data
-    clearly does not show.
+    The ramp gets the widening Gaussian. Cut-out has its own fixed, narrow
+    spread, because smoothing it with sigma ~5 m/s pulled output down from
+    about 15 m/s, and the metered data stays flat there.
     """
     p = turbine_curve(rotor_diameter, GRID, cut_out=False) / RATED_KW
     out = np.empty_like(v, dtype=float)

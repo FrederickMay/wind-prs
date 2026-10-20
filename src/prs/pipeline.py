@@ -27,8 +27,8 @@ def clean_hours(panel):
 def calmest_winter_shift(wind_model, start="1940-01-01"):
     """Mean Gaussian wind anomaly of the calmest Dec-Feb winter on record.
 
-    Pre-1979 ERA5 is used here on purpose: it is only for extreme-event
-    context, not for calibrating the model.
+    Uses the full record back to 1940. Pre-1979 ERA5 is weaker, but this
+    is only for picking an extreme winter, not for fitting anything.
     """
     ws = load_era5_site(ERA5_METHOD, start, FIT_YEARS[1])
     e = pd.Series(wind_model.site_to_e(ws.values, ws.index), ws.index)

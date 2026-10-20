@@ -1,25 +1,26 @@
-"""Hourly GB power price model (arithmetic, so prices can go negative).
+"""Hourly GB power price model. Additive, not log-based, because GB prices
+can go negative.
 
   P_t = F + Y_m(t) + S(t) + g(cf_t) + X_t
 
-  F      forward baseload level (GBP/MWh), an input, not fitted. Historical
-         levels are dominated by the 2021-23 gas crisis, so we let the user
-         set the level and fit only the *shape* and *dynamics* from data.
-  Y_m    monthly level deviation, AR(1) month to month. Captures slow drifts
-         (fuel prices, demand) that the hourly process cannot.
-  S(t)   seasonal shape: month-of-year + hour-of-day x weekday/weekend,
-         using UK local time because demand follows the clock, not the sun.
-  g(cf)  cannibalisation: price falls when national wind is high,
-         g = b1*cf + b2*cf^2 (the curvature lets prices fall faster when the
-         system is flooded with wind). This term is what links price to wind.
-  X_t    hourly residual, AR(1) mean-reverting. Its innovations are a mix
-         of two normals, a calm regime and a rare high-variance "spike"
-         regime, which gives the fat tails (jumps) seen in GB prices.
+  F      baseload forward level (GBP/MWh). This is an input, not fitted:
+         the 2021-23 gas crisis dominates the history, so the level is set
+         by hand and only the shape and dynamics come from data.
+  Y_m    monthly drift in the level, AR(1) from month to month. Picks up
+         slow changes (fuel, demand) the hourly part can't.
+  S(t)   seasonal shape: month of year plus hour of day, split weekday and
+         weekend. Uses UK local time, since demand follows the clock.
+  g(cf)  cannibalisation: g = b1*cf + b2*cf^2, so prices fall as national
+         wind rises, and fall faster once the system is flooded with wind.
+         This is the term that links price to wind.
+  X_t    hourly AR(1) noise. Its shocks come from two normals, a calm one
+         and a rare, much wider spike one, which gives GB prices their
+         fat tails.
 
-Shape and hourly dynamics are fitted on the post-crisis period
-(Jul 2023 - Dec 2025) because that market looks most like the future one.
-The monthly level AR(1) is fitted on both non-crisis windows
-(2017 - Jun 2021 and Jul 2023 - 2025), each de-meaned separately.
+Shape and hourly dynamics are fitted on Jul 2023 - Dec 2025, the period
+most like the market going forward. The monthly AR(1) uses both non-crisis
+windows (2017 - Jun 2021 and Jul 2023 - 2025), each with its own mean
+removed.
 """
 from dataclasses import dataclass, field
 

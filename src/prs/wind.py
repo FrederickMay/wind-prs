@@ -1,35 +1,35 @@
-"""Stochastic model of hourly site wind jointly with the GB national wind factor.
+"""Hourly site wind, simulated together with GB national wind.
 
-Idea: hourly wind speed is skewed, seasonal and strongly autocorrelated.
-We map it to a standard normal variable, remove what is predictable
-(season, time of day), and model what is left as a linear Gaussian process.
+Hourly wind speed is skewed, seasonal and very persistent, which makes it
+awkward to model directly. So I map it onto a standard normal, strip out
+the predictable parts (season, time of day) and model the rest as a linear
+Gaussian process.
 
-Site wind (ERA5, fitted 1991-2025):
-  1. Marginal: a Weibull distribution for each calendar month (k_m, c_m).
-  2. Gaussianise: z = Phi^-1( F_Weibull,m(ws) ), so z ~ N(0,1) per month.
-  3. Remove the diurnal cycle: e = (z - mu[month,hour]) / sd[month,hour].
+Site wind (ERA5, fitted on 1991-2025):
+  1. A Weibull distribution for each calendar month (k_m, c_m).
+  2. Map to normal: z = Phi^-1( F_Weibull,m(ws) ), so z ~ N(0,1) each month.
+  3. Remove the daily cycle: e = (z - mu[month,hour]) / sd[month,hour].
 
-National wind (Elexon capacity factor, fitted on the recent fleet):
-  1. Marginal: empirical quantiles of CF for each calendar month.
-  2. Same Gaussianise / deseasonalise steps.
+National wind (Elexon capacity factor, recent fleet only):
+  1. Empirical CF quantiles for each calendar month.
+  2. Then the same two steps as above.
 
-Dynamics, in Gaussian units, for site (s) and national (n):
+In normal units, site (s) and national (n) wind follow
   e_t = r_t + month_shock + year_shock
 
-  r_t     bivariate VAR(24) with correlated innovations, fitted on hours
-          after removing each calendar month's mean. Hour-to-day weather.
-          Correlated innovations + cross-lags = a Gaussian copula linking
-          site and national wind.
-  month_shock  one draw per month: "windy month / calm month" weather
-          regimes. An hourly VAR forgets within days, so on its own it makes
-          monthly totals too similar (20% too little spread). Its variance
-          is whatever the VAR leaves unexplained in 35 years of ERA5
-          monthly means.
-  year_shock   same idea for whole years, sized to match the spread of
-          annual means. Matters for a 10-year contract.
-  The national shocks are correlated with the site shocks (rho fitted on
-  2017-2025 monthly means): weather regimes cover all of GB, but not
-  uniformly.
+  r_t          bivariate VAR(24), fitted after removing each month's mean.
+               Covers hour-to-day weather. Its correlated shocks and
+               cross-lags tie site and national wind together, which is
+               a Gaussian copula in practice.
+  month_shock  one draw per month for windy or calm spells. An hourly VAR
+               forgets within a few days, so by itself it made monthly
+               totals about 20% too similar. The shock's variance is the
+               gap between ERA5's monthly spread and the VAR's.
+  year_shock   same idea for whole years. It fits to roughly zero, because
+               the monthly shocks already supply enough year-to-year spread.
+  National shocks are correlated with site shocks (rho from 2017-2025
+  monthly means), since a calm month in Wales is usually, but not always,
+  calm across GB.
 """
 from dataclasses import dataclass, field
 

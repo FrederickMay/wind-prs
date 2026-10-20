@@ -1,64 +1,84 @@
 # wind-prs
 
-Pricing a **wind farm proxy revenue swap (PRS)** for Pen y Cymoedd, a 228 MW
-onshore wind farm in South Wales, with correlated stochastic models of wind
-and GB power prices, a Python reference Monte Carlo and a multithreaded C++
-engine.
+How much should a hedge provider pay for the output of a Welsh wind farm,
+and how much risk is it taking on?
 
-A PRS swaps the farm's uncertain *proxy revenue* (what the turbines should
-earn given the measured wind and an agreed efficiency, times the hourly
-power price) for a fixed payment from a hedge provider. The farm keeps
-operational risk; the hedge provider takes weather, price and shape risk.
-The questions: **what fixed price is fair, and how much risk does the hedge
-provider carry?**
+This project prices a proxy revenue swap (PRS) for Pen y Cymoedd, a 228 MW
+onshore wind farm near Neath. In a PRS the farm gives up its *proxy
+revenue* in exchange for a fixed payment. Proxy revenue is what the turbines
+should have earned given the measured wind and an agreed efficiency,
+multiplied by the hourly power price. The farm keeps its operational risk
+(breakdowns, curtailment); the hedge provider takes the weather and price
+risk.
 
-## Results (10-year deal from Jan 2027, monthly settlement, GBP 75/MWh baseload forward)
+To get there I built a stochastic model of site and national wind, a GB
+power price model linked to national wind, a Monte Carlo in Python, and a
+multithreaded C++ version of the same Monte Carlo.
+
+## Results
+
+Base case: a 10-year deal starting January 2027, settled monthly, with a
+GBP 75/MWh baseload forward.
 
 | | |
 |---|---|
-| Expected proxy volume | 630 GWh/yr (capacity factor 31.5%), P90 574 GWh |
+| Expected proxy volume | 630 GWh/yr (31.5% capacity factor); P90 is 574 GWh |
 | Volume-weighted baseload price | GBP 76.7/MWh |
-| **Fair fixed price** | **GBP 67.9/MWh** (capture rate 88.6%) |
-| Risk premium (8% hurdle on 99% ES capital) | GBP 1.1/MWh, quoted price ~GBP 66.8/MWh |
-| Hedge provider lifetime PV risk, 99% ES | GBP 51.5m unhedged, GBP 23.3m with baseload forward hedge |
-| Worst stress (calm winter + gas shock, hedged) | -GBP 13.1m mean year-1 P&L |
-| C++ engine | 10,000 ten-year hourly paths in ~27 s; ~5x Python on 1 thread, ~25x on 16 |
+| Fair fixed price | GBP 67.9/MWh, i.e. a capture rate of 88.6% |
+| Risk premium (8% hurdle rate on 99% ES capital) | GBP 1.1/MWh, so a quote of about GBP 66.8/MWh |
+| Hedge provider's lifetime risk, 99% ES | GBP 51.5m unhedged, GBP 23.3m with a baseload forward hedge |
+| Worst stress (calm winter during a gas shock, hedged) | about -GBP 13m in year 1 |
+| C++ engine | 10,000 ten-year hourly paths in about 27 s; 5x Python on one thread, about 25x on 16 |
 
-The fair price sits ~GBP 9/MWh below baseload because of **cannibalisation**:
-the farm generates most when the whole GB wind fleet does, which is when
-prices are lowest. The most dangerous scenario for a hedged provider is a
-still winter during a gas price spike: it sold forward the power it expected
-the farm to make, the farm doesn't make it, and it buys back at crisis prices.
+The fair price comes in about GBP 9/MWh below baseload. That's
+cannibalisation: the farm generates most when the rest of the GB wind fleet
+does, and those are the hours when power is cheapest.
 
-## Method
+The stress tests surprised me a little. A gas price shock on its own barely
+touches a hedged provider. A calm winter on its own costs a few million. Put
+them together, though, and the provider has sold forward power the farm
+never generates, then has to buy it back at crisis prices. That combination
+loses more than twice as much as the calm winter alone.
 
-1. **Data.** ERA5 100 m wind on a 3x3 grid around the site (1940-2026,
-   calibrated on 1991-2025); Elexon metered output (B1610, BMU `T_PNYCW-1`,
-   from Feb 2019), bid acceptances (BOALF, to remove curtailed hours),
-   Market Index prices (MID) and national wind generation (FUELHH).
-2. **Power curve** (`power.py`). Turbine curve from P = 1/2 rho A cp(v) v^3,
-   smoothed to farm level, with a linear ERA5 bias correction and an
-   efficiency factor. Out of sample (2023-25): hourly R2 0.85, monthly R2
-   0.95, mean monthly error 6%. [notebook 02]
-3. **Wind** (`wind.py`). Monthly Weibull marginals mapped to Gaussian,
-   seasonal/diurnal cycle removed, bivariate VAR(24) of site and national
-   wind with correlated innovations (a Gaussian copula), plus monthly
-   weather-regime shocks sized so monthly and annual variability match 35
-   years of ERA5. [notebook 03]
-4. **Price** (`price.py`). Arithmetic (GB prices go negative):
-   forward level + monthly AR(1) level + month/hour/weekday shape +
-   quadratic in national wind (cannibalisation) + hourly AR(1) with a
-   two-regime (calm/spike) innovation mixture. [notebook 04]
-5. **Monte Carlo** (`pricing.py`, `cpp/`). Python reference and a C++17
-   engine (Eigen, `<random>`, `std::thread`, pybind11, CMake). Per-path
-   seeding makes results identical for any thread count. [notebook 06]
-6. **Pricing and risk** (`pricing.py`). Fair fixed price, hedged and
-   unhedged VaR/ES, cost-of-capital risk premium, stress tests (still
-   winter calibrated on the 1963/64 winter, 2022-style gas shock, stronger
-   cannibalisation), and a policy discussion of GB farms coming off
-   Renewables Obligation support. [notebook 05]
+## How it works
 
-## Repository
+Data. ERA5 100 m wind on a 3x3 grid around the site, 1940-2026 (models are
+fitted on 1991-2025). From Elexon: metered output for BMU `T_PNYCW-1`
+(B1610, only available from February 2019), bid acceptances (BOALF, used to
+remove curtailed hours), Market Index prices (MID) and national wind
+generation (FUELHH).
+
+Power curve, `power.py` (notebook 02). The turbine curve comes from
+P = 1/2 rho A cp(v) v^3, smoothed to farm level, with a linear correction
+for ERA5's bias and an efficiency factor. On 2023-2025 data the fit never
+saw, it gets hourly R2 0.85, monthly R2 0.95 and a typical monthly error of
+about 6%.
+
+Wind, `wind.py` (notebook 03). Monthly Weibull distributions are mapped to
+a standard normal and the seasonal and daily cycles are taken out. Site and
+national wind then follow a bivariate VAR(24) with correlated shocks
+(effectively a Gaussian copula). On top of that sits a monthly "weather
+regime" shock, sized so monthly and annual variability match 35 years of
+ERA5.
+
+Price, `price.py` (notebook 04). Additive rather than log-based, since GB
+prices go negative. It's the forward level, plus a monthly AR(1) drift, plus
+a month/hour/weekday shape, plus a quadratic in national wind (the
+cannibalisation term), plus an hourly AR(1) whose shocks switch between a
+calm regime and a spike regime.
+
+Monte Carlo, `pricing.py` and `cpp/` (notebook 06). A readable Python
+version and a C++17 engine (Eigen, `<random>`, `std::thread`, pybind11,
+CMake). Every path seeds its own random generator, so the C++ results don't
+change with the number of threads.
+
+Pricing and risk, `pricing.py` (notebook 05). The fair fixed price, hedged
+and unhedged VaR and ES, a cost-of-capital risk premium, and stress tests: a
+still winter calibrated on 1963/64, a 2022-style gas shock and steeper
+cannibalisation. The notebook ends with a section on GB farms reaching the
+end of Renewables Obligation support.
+
+## Repository layout
 
 ```
 src/prs/        data.py (fetchers, loaders), power.py, wind.py, price.py,
@@ -68,63 +88,65 @@ notebooks/      01 explore, 02 power curve, 03 wind, 04 price, 05 pricing & risk
 tests/          pytest: unit tests, model-vs-data checks, C++ vs Python agreement
 ```
 
-## Reproduce
+## Running it yourself
 
 ```powershell
 conda env create -f environment.yml          # or: conda env update -f environment.yml --prune
 conda activate prs
 
-# 1. ERA5 needs a CDS API key in ~/.cdsapirc; Elexon needs no key
+# 1. Download data. ERA5 needs a CDS API key in ~/.cdsapirc; Elexon needs none
 python -c "import sys; sys.path.insert(0,'src'); from prs.data import download_era5_site, build_hourly_panel; download_era5_site(); build_hourly_panel()"
 
-# 2. C++ engine (needs MSVC Build Tools with the C++ workload)
+# 2. Build the C++ engine (needs MSVC Build Tools with the C++ workload)
 powershell -ExecutionPolicy Bypass -File cpp\build.ps1
 
-# 3. Tests, then run the notebooks in order
+# 3. Run the tests, then the notebooks in order
 python -m pytest -q
 ```
 
-Data are cached under `data/` (not committed). Fitted models are cached in
-`data/processed/models.pkl`; delete it (or call `load_models(refresh=True)`)
-after changing a model.
+Downloaded data are cached under `data/`, which isn't committed. Fitted
+models are cached in `data/processed/models.pkl`. If you change a model,
+delete that file or call `load_models(refresh=True)`.
 
 ## Limitations
 
-See the end of notebook 05. The main ones: price shape and cannibalisation
-fitted on 2.5 post-crisis years with a fixed slope; no stochastic multi-year
-gas price factor (handled as a stress test); FUELHH excludes embedded wind;
-extreme (>GBP 300/MWh) price spikes are under-represented.
+The full list is at the end of notebook 05. The main ones:
+- The price shape and wind slope are fitted on just 2.5 post-crisis years,
+  and the slope is held fixed.
+- There's no random long-run gas price factor; gas only enters through a
+  stress test.
+- FUELHH leaves out embedded wind.
+- Extreme price spikes above GBP 300/MWh are under-represented.
 
 ## Data sources and attribution
 
-No raw data is stored in this repository; the code downloads it from the
-original providers. Figures and tables in the notebooks are derived from:
+This repository contains no raw data; the code downloads everything from
+the original providers. The notebook figures and tables are derived from:
 
-- **Elexon BMRS** (metered output B1610, bid-offer acceptances BOALF, Market
-  Index prices MID, generation by fuel type FUELHH), via the Elexon Insights
-  API. Contains BMRS data © Elexon Limited copyright and database right 2026,
-  used under the [BMRS data licence](https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/).
+- Elexon BMRS (B1610 metered output, BOALF bid-offer acceptances, MID
+  Market Index prices, FUELHH generation by fuel type), through the Elexon
+  Insights API. Contains BMRS data © Elexon Limited copyright and database
+  right 2026, used under the [BMRS data licence](https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/).
   Elexon does not endorse this project.
-- **ERA5** hourly reanalysis (Hersbach et al., 2020, *Q. J. R. Meteorol. Soc.*
+- ERA5 hourly reanalysis (Hersbach et al., 2020, *Q. J. R. Meteorol. Soc.*
   146, 1999-2049), from the Copernicus Climate Data Store. Generated using
-  Copernicus Climate Change Service information 2026. The ERA5 data have been
-  modified (interpolated, transformed and bias-corrected). Neither the
+  Copernicus Climate Change Service information 2026. The ERA5 data have
+  been modified (interpolated, transformed and bias-corrected). Neither the
   European Commission nor ECMWF is responsible for any use that may be made
   of the Copernicus information or data it contains.
-- **windpowerlib** turbine library (OpenEnergy Platform): the power
-  coefficient curve of the Siemens SWT113/3200 in `src/prs/power.py` is taken
-  from it.
-- Farm details (capacity, turbine type, hub height) from public sources
-  including Wikipedia and The Wind Power database.
+- The windpowerlib turbine library (OpenEnergy Platform), for the power
+  coefficient curve of the Siemens SWT113/3200 used in `src/prs/power.py`.
+- Public sources, including Wikipedia and The Wind Power database, for farm
+  details (capacity, turbine type, hub height).
 
 ## Disclaimer
 
 This is an independent student project built from public data. It is not
 affiliated with or endorsed by Vattenfall, Pen y Cymoedd Wind Farm Ltd,
-Elexon or ECMWF. Prices, risk figures and stress results are illustrative
-model outputs, not valuations, offers or investment advice.
+Elexon or ECMWF. The prices, risk figures and stress results are
+illustrative model outputs, not valuations, offers or investment advice.
 
 ## Licence
 
-Code: MIT (see `LICENSE`). The MIT licence covers this repository's code
-only; third-party data remain under their providers' licences above.
+The code is MIT licensed (see `LICENSE`). That covers the code in this
+repository only; the data remain under their providers' licences above.
