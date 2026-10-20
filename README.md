@@ -95,6 +95,36 @@ fitted on 2.5 post-crisis years with a fixed slope; no stochastic multi-year
 gas price factor (handled as a stress test); FUELHH excludes embedded wind;
 extreme (>GBP 300/MWh) price spikes are under-represented.
 
+## Data sources and attribution
+
+No raw data is stored in this repository; the code downloads it from the
+original providers. Figures and tables in the notebooks are derived from:
+
+- **Elexon BMRS** (metered output B1610, bid-offer acceptances BOALF, Market
+  Index prices MID, generation by fuel type FUELHH), via the Elexon Insights
+  API. Contains BMRS data © Elexon Limited copyright and database right 2026,
+  used under the [BMRS data licence](https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/).
+  Elexon does not endorse this project.
+- **ERA5** hourly reanalysis (Hersbach et al., 2020, *Q. J. R. Meteorol. Soc.*
+  146, 1999-2049), from the Copernicus Climate Data Store. Generated using
+  Copernicus Climate Change Service information 2026. The ERA5 data have been
+  modified (interpolated, transformed and bias-corrected). Neither the
+  European Commission nor ECMWF is responsible for any use that may be made
+  of the Copernicus information or data it contains.
+- **windpowerlib** turbine library (OpenEnergy Platform): the power
+  coefficient curve of the Siemens SWT113/3200 in `src/prs/power.py` is taken
+  from it.
+- Farm details (capacity, turbine type, hub height) from public sources
+  including Wikipedia and The Wind Power database.
+
+## Disclaimer
+
+This is an independent student project built from public data. It is not
+affiliated with or endorsed by Vattenfall, Pen y Cymoedd Wind Farm Ltd,
+Elexon or ECMWF. Prices, risk figures and stress results are illustrative
+model outputs, not valuations, offers or investment advice.
+
 ## Licence
 
-MIT
+Code: MIT (see `LICENSE`). The MIT licence covers this repository's code
+only; third-party data remain under their providers' licences above.
